@@ -5,7 +5,7 @@
    <VSEOINTERF>
     <CLSNAME>ZIF_TOML_TYPES</CLSNAME>
     <LANGU>E</LANGU>
-    <DESCRIPT>TOML shared node types (DRY)</DESCRIPT>
+    <DESCRIPT>TOML AST node and data types</DESCRIPT>
     <EXPOSURE>2</EXPOSURE>
     <STATE>1</STATE>
     <UNICODE>X</UNICODE>

@@ -5,7 +5,7 @@
    <VSEOCLASS>
     <CLSNAME>ZCL_TOML</CLSNAME>
     <LANGU>E</LANGU>
-    <DESCRIPT>TOML facade, ajson-like path access</DESCRIPT>
+    <DESCRIPT>TOML document handler and path access facade</DESCRIPT>
     <STATE>1</STATE>
     <CLSCCINCL>X</CLSCCINCL>
     <FIXPT>X</FIXPT>

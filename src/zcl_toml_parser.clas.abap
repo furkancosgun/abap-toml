@@ -5,11 +5,11 @@ CLASS zcl_toml_parser DEFINITION
   PUBLIC SECTION.
     METHODS parse
       IMPORTING iv_toml         TYPE string
-      RETURNING VALUE(rv_nodes) TYPE zif_toml_types=>ty_nodes
+      RETURNING VALUE(rt_nodes) TYPE zif_toml_types=>ty_nodes
       RAISING   zcx_toml_error.
 
   PRIVATE SECTION.
-    DATA mv_nodes   TYPE zif_toml_types=>ty_nodes.
+    DATA mt_nodes   TYPE zif_toml_types=>ty_nodes.
     DATA mv_next_id TYPE i.
     DATA mv_current TYPE i.
 
@@ -17,14 +17,14 @@ CLASS zcl_toml_parser DEFINITION
 
     METHODS to_logical_lines
       IMPORTING iv_text         TYPE string
-      RETURNING VALUE(rv_lines) TYPE zif_toml_types=>ty_string_table.
+      RETURNING VALUE(rt_lines) TYPE zif_toml_types=>ty_string_table.
 
     METHODS strip_comment
       IMPORTING iv_line        TYPE string
       RETURNING VALUE(rv_line) TYPE string.
 
     METHODS parse_document
-      IMPORTING iv_lines TYPE zif_toml_types=>ty_string_table
+      IMPORTING it_lines TYPE zif_toml_types=>ty_string_table
       RAISING   zcx_toml_error.
 
     METHODS parse_table_header
@@ -45,7 +45,7 @@ CLASS zcl_toml_parser DEFINITION
     METHODS split_key_segments
       IMPORTING iv_key             TYPE string
                 iv_line_no         TYPE i
-      RETURNING VALUE(rv_segments) TYPE zif_toml_types=>ty_string_table
+      RETURNING VALUE(rt_segments) TYPE zif_toml_types=>ty_string_table
       RAISING   zcx_toml_error.
 
     METHODS unquote_key_segment
@@ -54,7 +54,7 @@ CLASS zcl_toml_parser DEFINITION
       RAISING   zcx_toml_error.
 
     METHODS ensure_table_path
-      IMPORTING iv_segments     TYPE zif_toml_types=>ty_string_table
+      IMPORTING it_segments     TYPE zif_toml_types=>ty_string_table
                 iv_define       TYPE abap_bool
                 iv_line_no      TYPE i
       RETURNING VALUE(rv_table) TYPE i
@@ -119,7 +119,7 @@ CLASS zcl_toml_parser DEFINITION
     METHODS split_top_level
       IMPORTING iv_text         TYPE string
                 iv_delim        TYPE c
-      RETURNING VALUE(rv_parts) TYPE zif_toml_types=>ty_string_table.
+      RETURNING VALUE(rt_parts) TYPE zif_toml_types=>ty_string_table.
 
     METHODS unescape_basic
       IMPORTING iv_inner        TYPE string
@@ -159,20 +159,20 @@ CLASS zcl_toml_parser IMPLEMENTATION.
   METHOD parse.
     init_root( ).
     mv_current = 0.
-    DATA(lv_lines) = to_logical_lines( iv_toml ).
-    parse_document( lv_lines ).
-    rv_nodes = mv_nodes.
+    DATA(lt_lines) = to_logical_lines( iv_toml ).
+    parse_document( lt_lines ).
+    rt_nodes = mt_nodes.
   ENDMETHOD.
 
   METHOD init_root.
-    CLEAR mv_nodes.
+    CLEAR mt_nodes.
     mv_next_id = 1.
-    DATA(lv_node) = VALUE zif_toml_types=>ty_node( id     = 0
+    DATA(ls_node) = VALUE zif_toml_types=>ty_node( id     = 0
                                                    parent = -1
                                                    name   = ''
                                                    kind   = zif_toml_types=>c_kind_table
                                                    value  = '' ).
-    INSERT lv_node INTO TABLE mv_nodes.
+    INSERT ls_node INTO TABLE mt_nodes.
   ENDMETHOD.
 
   METHOD to_logical_lines.
@@ -192,13 +192,13 @@ CLASS zcl_toml_parser IMPLEMENTATION.
     lv_normalized = iv_text.
     REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf IN lv_normalized WITH cl_abap_char_utilities=>newline.
     REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf(1) IN lv_normalized WITH cl_abap_char_utilities=>newline.
-    SPLIT lv_normalized AT cl_abap_char_utilities=>newline INTO TABLE rv_lines.
-    DATA(lv_joined) = VALUE zif_toml_types=>ty_string_table( ).
+    SPLIT lv_normalized AT cl_abap_char_utilities=>newline INTO TABLE rt_lines.
+    DATA(lt_joined) = VALUE zif_toml_types=>ty_string_table( ).
     CLEAR lv_buffer.
     lv_depth = 0.
     CLEAR lv_in_multi.
 
-    LOOP AT rv_lines INTO lv_line.
+    LOOP AT rt_lines INTO lv_line.
       IF lv_buffer IS INITIAL.
         lv_buffer = lv_line.
       ELSE.
@@ -273,39 +273,53 @@ CLASS zcl_toml_parser IMPLEMENTATION.
         lv_idx += 1.
       ENDWHILE.
       IF lv_in_multi IS INITIAL AND lv_depth = 0 AND lv_in_str IS INITIAL AND lv_in_lit IS INITIAL.
-        INSERT lv_buffer INTO TABLE lv_joined.
+        INSERT lv_buffer INTO TABLE lt_joined.
         CLEAR lv_buffer.
       ENDIF.
     ENDLOOP.
     IF lv_buffer IS NOT INITIAL.
-      INSERT lv_buffer INTO TABLE lv_joined.
+      INSERT lv_buffer INTO TABLE lt_joined.
     ENDIF.
-    rv_lines = lv_joined.
+    rt_lines = lt_joined.
   ENDMETHOD.
 
   METHOD strip_comment.
     DATA lv_idx     TYPE i.
     DATA lv_len     TYPE i.
-    DATA lv_char    TYPE c LENGTH 1.
+    DATA lv_char    TYPE string.
     DATA lv_in_str  TYPE c LENGTH 1.
     DATA lv_in_lit  TYPE c LENGTH 1.
+    DATA lv_in_com  TYPE abap_bool.
     DATA lv_escaped TYPE abap_bool.
+    DATA lv_out     TYPE string.
 
     lv_len = strlen( iv_line ).
     CLEAR lv_in_str.
     CLEAR lv_in_lit.
+    lv_in_com = abap_false.
     lv_escaped = abap_false.
     lv_idx = 0.
+    CLEAR lv_out.
     WHILE lv_idx < lv_len.
       lv_char = substring( val = iv_line
                            off = lv_idx
                            len = 1 ).
+      IF lv_in_com = abap_true.
+        IF lv_char = cl_abap_char_utilities=>newline.
+          lv_in_com = abap_false.
+          lv_out = |{ lv_out }{ lv_char }|.
+        ENDIF.
+        lv_idx += 1.
+        CONTINUE.
+      ENDIF.
       IF lv_escaped = abap_true.
+        lv_out = |{ lv_out }{ lv_char }|.
         lv_escaped = abap_false.
         lv_idx += 1.
         CONTINUE.
       ENDIF.
       IF lv_in_str = 'X'.
+        lv_out = |{ lv_out }{ lv_char }|.
         CASE lv_char.
           WHEN '\'.
             lv_escaped = abap_true.
@@ -316,6 +330,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
         CONTINUE.
       ENDIF.
       IF lv_in_lit = 'X'.
+        lv_out = |{ lv_out }{ lv_char }|.
         IF lv_char = `'`.
           CLEAR lv_in_lit.
         ENDIF.
@@ -325,17 +340,18 @@ CLASS zcl_toml_parser IMPLEMENTATION.
       CASE lv_char.
         WHEN '"'.
           lv_in_str = 'X'.
+          lv_out = |{ lv_out }{ lv_char }|.
         WHEN `'`.
           lv_in_lit = 'X'.
+          lv_out = |{ lv_out }{ lv_char }|.
         WHEN '#'.
-          rv_line = substring( val = iv_line
-                               off = 0
-                               len = lv_idx ).
-          RETURN.
+          lv_in_com = abap_true.
+        WHEN OTHERS.
+          lv_out = |{ lv_out }{ lv_char }|.
       ENDCASE.
       lv_idx += 1.
     ENDWHILE.
-    rv_line = iv_line.
+    rv_line = lv_out.
   ENDMETHOD.
 
   METHOD parse_document.
@@ -345,7 +361,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
     DATA lv_no      TYPE i.
 
     lv_no = 0.
-    LOOP AT iv_lines INTO lv_line.
+    LOOP AT it_lines INTO lv_line.
       lv_no += 1.
       lv_clean = strip_comment( lv_line ).
       lv_trimmed = trim_both( lv_clean ).
@@ -368,7 +384,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
   METHOD parse_table_header.
     DATA lv_inner    TYPE string.
     DATA lv_len      TYPE i.
-    DATA lv_segments TYPE zif_toml_types=>ty_string_table.
+    DATA lt_segments TYPE zif_toml_types=>ty_string_table.
 
     lv_len = strlen( iv_line ).
     IF lv_len < 2 OR substring( val = iv_line
@@ -385,9 +401,9 @@ CLASS zcl_toml_parser IMPLEMENTATION.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = 'Empty table header'
                                           iv_line = iv_line_no ).
     ENDIF.
-    lv_segments = split_key_segments( iv_key     = lv_inner
+    lt_segments = split_key_segments( iv_key     = lv_inner
                                       iv_line_no = iv_line_no ).
-    mv_current = ensure_table_path( iv_segments = lv_segments
+    mv_current = ensure_table_path( it_segments = lt_segments
                                     iv_define   = abap_true
                                     iv_line_no  = iv_line_no ).
   ENDMETHOD.
@@ -395,13 +411,15 @@ CLASS zcl_toml_parser IMPLEMENTATION.
   METHOD parse_array_table_header.
     DATA lv_inner     TYPE string.
     DATA lv_len       TYPE i.
-    DATA lv_segments  TYPE zif_toml_types=>ty_string_table.
+    DATA lt_segments  TYPE zif_toml_types=>ty_string_table.
     DATA lv_last      TYPE string.
-    DATA lv_parents   TYPE zif_toml_types=>ty_string_table.
+    DATA lt_parents   TYPE zif_toml_types=>ty_string_table.
     DATA lv_parent_id TYPE i.
     DATA lv_arr_id    TYPE i.
     DATA lv_new_id    TYPE i.
     DATA lv_idx       TYPE i.
+    DATA ls_found     TYPE zif_toml_types=>ty_node.
+    DATA lv_saved_cur TYPE i.
 
     lv_len = strlen( iv_line ).
     IF lv_len < 4 OR substring( val = iv_line
@@ -414,26 +432,29 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                           off = 2
                           len = lv_len - 4 ).
     lv_inner = trim_both( lv_inner ).
-    lv_segments = split_key_segments( iv_key     = lv_inner
+    lt_segments = split_key_segments( iv_key     = lv_inner
                                       iv_line_no = iv_line_no ).
-    IF lines( lv_segments ) = 0.
+    IF lines( lt_segments ) = 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = 'Empty array table header'
                                           iv_line = iv_line_no ).
     ENDIF.
-    CLEAR lv_parents.
-    DO lines( lv_segments ) - 1 TIMES.
+    CLEAR lt_parents.
+    DO lines( lt_segments ) - 1 TIMES.
       lv_idx = sy-index.
-      lv_last = lv_segments[ lv_idx ].
-      INSERT lv_last INTO TABLE lv_parents.
+      lv_last = lt_segments[ lv_idx ].
+      INSERT lv_last INTO TABLE lt_parents.
     ENDDO.
-    lv_last = lv_segments[ lines( lv_segments ) ].
-    IF lv_parents IS INITIAL.
+    lv_last = lt_segments[ lines( lt_segments ) ].
+    lv_saved_cur = mv_current.
+    mv_current = 0.
+    IF lt_parents IS INITIAL.
       lv_parent_id = 0.
     ELSE.
-      lv_parent_id = ensure_table_path( iv_segments = lv_parents
+      lv_parent_id = ensure_table_path( it_segments = lt_parents
                                         iv_define   = abap_false
                                         iv_line_no  = iv_line_no ).
     ENDIF.
+    mv_current = lv_saved_cur.
     lv_arr_id = find_child( iv_parent = lv_parent_id
                             iv_name   = lv_last ).
     IF lv_arr_id = 0.
@@ -443,15 +464,14 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                             parent = lv_parent_id
                                             name   = lv_last
                                             kind   = zif_toml_types=>c_kind_array
-                                            value  = '' ) INTO TABLE mv_nodes.
+                                            value  = '' ) INTO TABLE mt_nodes.
     ELSE.
-      DATA(lv_found) = VALUE zif_toml_types=>ty_node( ).
-      READ TABLE mv_nodes INTO lv_found WITH KEY id = lv_arr_id.
+      READ TABLE mt_nodes INTO ls_found WITH KEY id = lv_arr_id.
       IF sy-subrc <> 0.
         RAISE EXCEPTION NEW zcx_toml_error( iv_text = 'Internal error: array node missing'
                                             iv_line = iv_line_no ).
       ENDIF.
-      IF lv_found-kind <> zif_toml_types=>c_kind_array.
+      IF ls_found-kind <> zif_toml_types=>c_kind_array.
         RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Name conflict, not an array table: { lv_last }|
                                             iv_line = iv_line_no ).
       ENDIF.
@@ -462,7 +482,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                           parent = lv_arr_id
                                           name   = ''
                                           kind   = zif_toml_types=>c_kind_table
-                                          value  = '' ) INTO TABLE mv_nodes.
+                                          value  = '' ) INTO TABLE mt_nodes.
     mv_current = lv_new_id.
   ENDMETHOD.
 
@@ -470,9 +490,9 @@ CLASS zcl_toml_parser IMPLEMENTATION.
     DATA lv_eq        TYPE i.
     DATA lv_key       TYPE string.
     DATA lv_raw       TYPE string.
-    DATA lv_segments  TYPE zif_toml_types=>ty_string_table.
+    DATA lt_segments  TYPE zif_toml_types=>ty_string_table.
     DATA lv_last      TYPE string.
-    DATA lv_parents   TYPE zif_toml_types=>ty_string_table.
+    DATA lt_parents   TYPE zif_toml_types=>ty_string_table.
     DATA lv_parent_id TYPE i.
     DATA lv_idx       TYPE i.
 
@@ -490,27 +510,27 @@ CLASS zcl_toml_parser IMPLEMENTATION.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Invalid key-value line: { iv_line }|
                                           iv_line = iv_line_no ).
     ENDIF.
-    lv_segments = split_key_segments( iv_key     = lv_key
+    lt_segments = split_key_segments( iv_key     = lv_key
                                       iv_line_no = iv_line_no ).
-    IF lines( lv_segments ) = 0.
+    IF lines( lt_segments ) = 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Empty key: { iv_line }|
                                           iv_line = iv_line_no ).
     ENDIF.
-    CLEAR lv_parents.
-    DO lines( lv_segments ) - 1 TIMES.
+    CLEAR lt_parents.
+    DO lines( lt_segments ) - 1 TIMES.
       lv_idx = sy-index.
-      lv_last = lv_segments[ lv_idx ].
-      INSERT lv_last INTO TABLE lv_parents.
+      lv_last = lt_segments[ lv_idx ].
+      INSERT lv_last INTO TABLE lt_parents.
     ENDDO.
-    lv_last = lv_segments[ lines( lv_segments ) ].
-    IF lv_parents IS INITIAL.
+    lv_last = lt_segments[ lines( lt_segments ) ].
+    IF lt_parents IS INITIAL.
       lv_parent_id = mv_current.
     ELSE.
-      lv_parent_id = ensure_table_path( iv_segments = lv_parents
+      lv_parent_id = ensure_table_path( it_segments = lt_parents
                                         iv_define   = abap_false
                                         iv_line_no  = iv_line_no ).
     ENDIF.
-    lv_last = lv_segments[ lines( lv_segments ) ].
+    lv_last = lt_segments[ lines( lt_segments ) ].
     IF find_child( iv_parent = lv_parent_id
                    iv_name   = lv_last ) <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Duplicate key: { lv_last }|
@@ -569,7 +589,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
             RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Empty key segment in: { iv_key }|
                                                 iv_line = iv_line_no ).
           ENDIF.
-          INSERT unquote_key_segment( lv_plain ) INTO TABLE rv_segments.
+          INSERT unquote_key_segment( lv_plain ) INTO TABLE rt_segments.
           CLEAR lv_buf.
         WHEN OTHERS.
           lv_buf = lv_buf && lv_char.
@@ -581,7 +601,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Empty key segment in: { iv_key }|
                                           iv_line = iv_line_no ).
     ENDIF.
-    INSERT unquote_key_segment( lv_plain ) INTO TABLE rv_segments.
+    INSERT unquote_key_segment( lv_plain ) INTO TABLE rt_segments.
   ENDMETHOD.
 
   METHOD unquote_key_segment.
@@ -616,10 +636,12 @@ CLASS zcl_toml_parser IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD ensure_table_path.
-    DATA lv_cur   TYPE i.
-    DATA lv_seg   TYPE string.
-    DATA lv_found TYPE i.
-    DATA lv_node  TYPE zif_toml_types=>ty_node.
+    DATA lv_cur          TYPE i.
+    DATA lv_seg          TYPE string.
+    DATA lv_found        TYPE i.
+    DATA ls_node         TYPE zif_toml_types=>ty_node.
+    DATA lt_arr_children TYPE zif_toml_types=>ty_nodes.
+    DATA ls_arr_child    TYPE zif_toml_types=>ty_node.
 
     lv_cur = 0.
     IF mv_current <> 0 AND iv_define = abap_false.
@@ -628,19 +650,31 @@ CLASS zcl_toml_parser IMPLEMENTATION.
     IF iv_define = abap_true.
       lv_cur = 0.
     ENDIF.
-    LOOP AT iv_segments INTO lv_seg.
+    LOOP AT it_segments INTO lv_seg.
       lv_found = find_child( iv_parent = lv_cur
                              iv_name   = lv_seg ).
       IF lv_found = 0.
         lv_found = add_table_node( iv_parent = lv_cur
                                    iv_name   = lv_seg ).
       ELSE.
-        READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_found.
+        READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_found.
         IF sy-subrc <> 0.
           RAISE EXCEPTION NEW zcx_toml_error( iv_text = 'Internal error: table node missing'
                                               iv_line = iv_line_no ).
         ENDIF.
-        IF lv_node-kind <> zif_toml_types=>c_kind_table.
+        IF ls_node-kind = zif_toml_types=>c_kind_array.
+          CLEAR lt_arr_children.
+          LOOP AT mt_nodes INTO ls_arr_child WHERE parent = lv_found.
+            INSERT ls_arr_child INTO TABLE lt_arr_children.
+          ENDLOOP.
+          IF lines( lt_arr_children ) > 0.
+            SORT lt_arr_children BY id DESCENDING.
+            lv_found = lt_arr_children[ 1 ]-id.
+          ELSE.
+            RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Array table empty: { lv_seg }|
+                                                iv_line = iv_line_no ).
+          ENDIF.
+        ELSEIF ls_node-kind <> zif_toml_types=>c_kind_table.
           RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path conflict, not a table: { lv_seg }|
                                               iv_line = iv_line_no ).
         ENDIF.
@@ -648,25 +682,25 @@ CLASS zcl_toml_parser IMPLEMENTATION.
       lv_cur = lv_found.
     ENDLOOP.
     IF iv_define = abap_true.
-      READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_cur.
-      IF sy-subrc = 0 AND lv_node-id <> 0.
-        IF lv_node-value = 'defined'.
+      READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_cur.
+      IF sy-subrc = 0 AND ls_node-id <> 0.
+        IF ls_node-value = 'defined'.
           RAISE EXCEPTION NEW zcx_toml_error( iv_text = 'Duplicate table definition'
                                               iv_line = iv_line_no ).
         ENDIF.
-        lv_node-value = 'defined'.
-        MODIFY mv_nodes FROM lv_node TRANSPORTING value WHERE id = lv_cur.
+        ls_node-value = 'defined'.
+        MODIFY mt_nodes FROM ls_node TRANSPORTING value WHERE id = lv_cur.
       ENDIF.
     ENDIF.
     rv_table = lv_cur.
   ENDMETHOD.
 
   METHOD find_child.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
     rv_id = 0.
-    LOOP AT mv_nodes INTO lv_node WHERE parent = iv_parent AND name = iv_name.
-      rv_id = lv_node-id.
+    LOOP AT mt_nodes INTO ls_node WHERE parent = iv_parent AND name = iv_name.
+      rv_id = ls_node-id.
       RETURN.
     ENDLOOP.
   ENDMETHOD.
@@ -678,7 +712,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                           parent = iv_parent
                                           name   = iv_name
                                           kind   = zif_toml_types=>c_kind_table
-                                          value  = '' ) INTO TABLE mv_nodes.
+                                          value  = '' ) INTO TABLE mt_nodes.
   ENDMETHOD.
 
   METHOD parse_value_into.
@@ -778,14 +812,14 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                           parent = iv_parent
                                           name   = iv_name
                                           kind   = zif_toml_types=>c_kind_string
-                                          value  = lv_normal ) INTO TABLE mv_nodes.
+                                          value  = lv_normal ) INTO TABLE mt_nodes.
     mv_next_id += 1.
   ENDMETHOD.
 
   METHOD parse_array_value_into.
     DATA lv_len    TYPE i.
     DATA lv_arr_id TYPE i.
-    DATA lv_parts  TYPE zif_toml_types=>ty_string_table.
+    DATA lt_parts  TYPE zif_toml_types=>ty_string_table.
     DATA lv_part   TYPE string.
     DATA lv_elem   TYPE string.
     DATA lv_inner  TYPE string.
@@ -803,7 +837,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                           parent = iv_parent
                                           name   = iv_name
                                           kind   = zif_toml_types=>c_kind_array
-                                          value  = '' ) INTO TABLE mv_nodes.
+                                          value  = '' ) INTO TABLE mt_nodes.
     lv_inner = substring( val = iv_trim
                           off = 1
                           len = lv_len - 2 ).
@@ -811,9 +845,9 @@ CLASS zcl_toml_parser IMPLEMENTATION.
     IF lv_inner IS INITIAL.
       RETURN.
     ENDIF.
-    lv_parts = split_top_level( iv_text  = lv_inner
+    lt_parts = split_top_level( iv_text  = lv_inner
                                 iv_delim = ',' ).
-    LOOP AT lv_parts INTO lv_part.
+    LOOP AT lt_parts INTO lv_part.
       lv_elem = trim_both( lv_part ).
       IF lv_elem IS INITIAL.
         CONTINUE.
@@ -833,7 +867,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
   METHOD parse_inline_table_into.
     DATA lv_len    TYPE i.
     DATA lv_tab_id TYPE i.
-    DATA lv_parts  TYPE zif_toml_types=>ty_string_table.
+    DATA lt_parts  TYPE zif_toml_types=>ty_string_table.
     DATA lv_part   TYPE string.
     DATA lv_elem   TYPE string.
     DATA lv_inner  TYPE string.
@@ -852,7 +886,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                           parent = iv_parent
                                           name   = iv_name
                                           kind   = zif_toml_types=>c_kind_table
-                                          value  = 'inline' ) INTO TABLE mv_nodes.
+                                          value  = 'inline' ) INTO TABLE mt_nodes.
     lv_inner = substring( val = iv_trim
                           off = 1
                           len = lv_len - 2 ).
@@ -860,11 +894,11 @@ CLASS zcl_toml_parser IMPLEMENTATION.
     IF lv_inner IS INITIAL.
       RETURN.
     ENDIF.
-    lv_parts = split_top_level( iv_text  = lv_inner
+    lt_parts = split_top_level( iv_text  = lv_inner
                                 iv_delim = ',' ).
     lv_saved = mv_current.
     mv_current = lv_tab_id.
-    LOOP AT lv_parts INTO lv_part.
+    LOOP AT lt_parts INTO lv_part.
       lv_elem = trim_both( lv_part ).
       IF lv_elem IS INITIAL.
         CONTINUE.
@@ -884,7 +918,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                             parent = iv_parent
                                             name   = iv_name
                                             kind   = zif_toml_types=>c_kind_boolean
-                                            value  = iv_trim ) INTO TABLE mv_nodes.
+                                            value  = iv_trim ) INTO TABLE mt_nodes.
       mv_next_id += 1.
       RETURN.
     ENDIF.
@@ -894,7 +928,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                             parent = iv_parent
                                             name   = iv_name
                                             kind   = lv_kind
-                                            value  = iv_trim ) INTO TABLE mv_nodes.
+                                            value  = iv_trim ) INTO TABLE mt_nodes.
       mv_next_id += 1.
       RETURN.
     ENDIF.
@@ -904,7 +938,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                             parent = iv_parent
                                             name   = iv_name
                                             kind   = zif_toml_types=>c_kind_float
-                                            value  = lv_normal ) INTO TABLE mv_nodes.
+                                            value  = lv_normal ) INTO TABLE mt_nodes.
       mv_next_id += 1.
       RETURN.
     ENDIF.
@@ -914,12 +948,21 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                           parent = iv_parent
                                           name   = iv_name
                                           kind   = zif_toml_types=>c_kind_integer
-                                          value  = lv_normal ) INTO TABLE mv_nodes.
+                                          value  = lv_normal ) INTO TABLE mt_nodes.
     mv_next_id += 1.
   ENDMETHOD.
 
   METHOD is_float_like.
+    DATA lv_lower TYPE string.
+
     rv_is_float = abap_false.
+    lv_lower = to_lower( iv_trim ).
+    IF lv_lower CP '0x*' OR lv_lower CP '+0x*' OR lv_lower CP '-0x*'.
+      RETURN.
+    ENDIF.
+    IF lv_lower CP '0o*' OR lv_lower CP '0b*'.
+      RETURN.
+    ENDIF.
     IF iv_trim CP '*.*' OR iv_trim CP '*e*' OR iv_trim CP '*E*'.
       rv_is_float = abap_true.
       RETURN.
@@ -979,7 +1022,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
                                           parent = iv_parent
                                           name   = iv_name
                                           kind   = zif_toml_types=>c_kind_string
-                                          value  = lv_plain ) INTO TABLE mv_nodes.
+                                          value  = lv_plain ) INTO TABLE mt_nodes.
     mv_next_id += 1.
   ENDMETHOD.
 
@@ -1055,7 +1098,7 @@ CLASS zcl_toml_parser IMPLEMENTATION.
           lv_buf = lv_buf && lv_char.
         WHEN OTHERS.
           IF lv_char = iv_delim AND lv_depth_b = 0 AND lv_depth_c = 0.
-            INSERT lv_buf INTO TABLE rv_parts.
+            INSERT lv_buf INTO TABLE rt_parts.
             CLEAR lv_buf.
           ELSE.
             lv_buf = lv_buf && lv_char.
@@ -1063,24 +1106,25 @@ CLASS zcl_toml_parser IMPLEMENTATION.
       ENDCASE.
       lv_idx += 1.
     ENDWHILE.
-    INSERT lv_buf INTO TABLE rv_parts.
+    INSERT lv_buf INTO TABLE rt_parts.
   ENDMETHOD.
 
   METHOD unescape_basic.
     DATA lv_idx  TYPE i.
     DATA lv_len  TYPE i.
-    DATA lv_char TYPE c LENGTH 1.
-    DATA lv_next TYPE c LENGTH 1.
+    DATA lv_char TYPE string.
+    DATA lv_next TYPE string.
     DATA lv_hex  TYPE string.
 
     lv_len = strlen( iv_inner ).
     lv_idx = 0.
+    CLEAR rv_plain.
     WHILE lv_idx < lv_len.
       lv_char = substring( val = iv_inner
                            off = lv_idx
                            len = 1 ).
       IF lv_char <> '\'.
-        rv_plain = rv_plain && lv_char.
+        rv_plain = |{ rv_plain }{ lv_char }|.
         lv_idx += 1.
         CONTINUE.
       ENDIF.
@@ -1152,7 +1196,6 @@ CLASS zcl_toml_parser IMPLEMENTATION.
     ENDIF.
     IF lv_tmp CP '*:*:*'.
       rv_is_datetime = abap_true.
-
     ENDIF.
   ENDMETHOD.
 
@@ -1207,7 +1250,6 @@ CLASS zcl_toml_parser IMPLEMENTATION.
     DATA lv_prefix  TYPE string.
     DATA lv_pos     TYPE i.
     DATA lv_chr     TYPE c LENGTH 1.
-
     DATA lv_first_c TYPE c LENGTH 1.
 
     lv_tmp = iv_raw.
@@ -1269,10 +1311,44 @@ CLASS zcl_toml_parser IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD trim_both.
+    DATA lv_changed TYPE abap_bool.
+    DATA lv_len     TYPE i.
+    DATA lv_first   TYPE string.
+    DATA lv_last    TYPE string.
+
     rv_trimmed = iv_text.
-    SHIFT rv_trimmed LEFT DELETING LEADING space.
-    SHIFT rv_trimmed RIGHT DELETING TRAILING space.
-    SHIFT rv_trimmed LEFT DELETING LEADING cl_abap_char_utilities=>horizontal_tab.
-    SHIFT rv_trimmed RIGHT DELETING TRAILING cl_abap_char_utilities=>horizontal_tab.
+    lv_changed = abap_true.
+    WHILE lv_changed = abap_true.
+      lv_changed = abap_false.
+      IF rv_trimmed IS INITIAL.
+        RETURN.
+      ENDIF.
+      lv_len = strlen( rv_trimmed ).
+      lv_first = substring( val = rv_trimmed
+                            off = 0
+                            len = 1 ).
+      IF    lv_first = ` `
+         OR lv_first = cl_abap_char_utilities=>horizontal_tab
+         OR lv_first = cl_abap_char_utilities=>newline
+         OR lv_first = cl_abap_char_utilities=>cr_lf(1).
+        rv_trimmed = substring( val = rv_trimmed
+                                off = 1 ).
+        lv_changed = abap_true.
+        CONTINUE.
+      ENDIF.
+      lv_last = substring( val = rv_trimmed
+                           off = lv_len - 1
+                           len = 1 ).
+      IF    lv_last = ` `
+         OR lv_last = cl_abap_char_utilities=>horizontal_tab
+         OR lv_last = cl_abap_char_utilities=>newline
+         OR lv_last = cl_abap_char_utilities=>cr_lf(1).
+        rv_trimmed = substring( val = rv_trimmed
+                                off = 0
+                                len = lv_len - 1 ).
+        lv_changed = abap_true.
+        CONTINUE.
+      ENDIF.
+    ENDWHILE.
   ENDMETHOD.
 ENDCLASS.

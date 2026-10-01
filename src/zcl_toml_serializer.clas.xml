@@ -5,7 +5,7 @@
    <VSEOCLASS>
     <CLSNAME>ZCL_TOML_SERIALIZER</CLSNAME>
     <LANGU>E</LANGU>
-    <DESCRIPT>TOML serializer (single responsibility)</DESCRIPT>
+    <DESCRIPT>TOML document serializer</DESCRIPT>
     <STATE>1</STATE>
     <CLSCCINCL>X</CLSCCINCL>
     <FIXPT>X</FIXPT>

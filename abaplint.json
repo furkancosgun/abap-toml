@@ -15,7 +15,7 @@
   },
   "dependencies": [
     {
-      "folder": "/deps",
+      "folder": "/deps/open-abap-core/src",
       "files": "/**/*.*"
     }
   ],

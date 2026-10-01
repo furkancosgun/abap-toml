@@ -1,130 +1,112 @@
 # abap-toml
 
-TOML v1.0 parser / serializer for ABAP, with ajson-style path access.
-Clean, extensible, SOLID + DRY: facade (`ZCL_TOML`), parser
-(`ZCL_TOML_PARSER`), serializer (`ZCL_TOML_SERIALIZER`), shared
-types (`ZIF_TOML_TYPES`), typed errors (`ZCX_TOML_ERROR`).
+TOML v1.0 parser and serializer for ABAP with path-based (ajson-style) access.
 
-## 🚀 Getting Started
+## Features
 
-```bash
-# Navigate to project directory
-cd abap-toml
+- **Full TOML v1.0 Support**: Bare and quoted keys, dotted keys, multiline and literal strings, integers (decimal, hex, octal, binary), floats, booleans, date-times, arrays, inline tables, and array of tables.
+- **Path-Based Access**: Query and mutate documents using XPath/ajson-like slash paths (`/server/host`, `/ports/0`).
+- **Bidirectional**: Parse TOML into an in-memory document tree and serialize it back to valid TOML.
+- **abapGit Compatible**: Standard file structure ready for deployment via abapGit.
 
-# Install dependencies
-npm install
+## Installation
 
-# Run the TOML demo program
-PROGRAM=ztoml_demo npm run run
+Install using [abapGit](https://abapgit.org) by adding this repository to your SAP system.
 
-# Run lint + unit tests
-npm test
-```
+## Quick Start
 
-## 📖 Usage (ajson-like)
+### Parsing TOML
 
 ```abap
 DATA lo_toml TYPE REF TO zcl_toml.
-
-" Read
-lo_toml = zcl_toml=>parse( lv_toml_text ).
 DATA lv_host TYPE string.
-lv_host = lo_toml->get_string( '/server/host' ).
 DATA lv_port TYPE i.
+
+lo_toml = zcl_toml=>parse( lv_toml_content ).
+
+lv_host = lo_toml->get_string( '/server/host' ).
 lv_port = lo_toml->get_integer( '/server/port' ).
+```
 
-" Write (tables are auto-created along the path)
-lo_toml->set_string(
-  iv_path  = '/server/host'
-  iv_value = 'example.com' ).
+### Path-Based Mutation & Serialization
+
+```abap
+DATA lo_toml TYPE REF TO zcl_toml.
+DATA lv_toml TYPE string.
+
+lo_toml = zcl_toml=>create_empty( ).
+
+lo_toml->set_string( iv_path  = '/server/host'
+                     iv_value = 'example.com' ).
+
+lo_toml->set_integer( iv_path  = '/server/port'
+                      iv_value = 8080 ).
+
 lo_toml->touch_array( '/ports' ).
-lo_toml->array_append_integer(
-  iv_path  = '/ports'
-  iv_value = 8080 ).
+lo_toml->array_append_integer( iv_path  = '/ports'
+                               iv_value = 8080 ).
 
-" Serialize back to TOML
-DATA lv_out TYPE string.
-lv_out = lo_toml->stringify( ).
+lv_toml = lo_toml->stringify( ).
 ```
 
-Path syntax: `/a/b/c`, array index `/ports/0`, `/` = root.
-Typed getters: `get_string`, `get_integer`, `get_float`,
-`get_boolean`, plus `get_kind`, `exists`, `array_length`,
-`delete_node`, `clear`. Errors raise `ZCX_TOML_ERROR`
-(`get_message( )`, `get_line( )`).
+## API Overview
 
-## 🧩 abapGit File Format
+### `ZCL_TOML` (Facade)
 
-Source files are stored in the [abapGit serialized file format](https://docs.abapgit.org/), so the repository can be synced to a real SAP system via [abapGit](https://docs.abapgit.org/). Classes, interfaces and programs use their standard abapGit layouts (`.clas.abap` + `.clas.xml`, `.intf.abap` + `.intf.xml`, `.prog.abap`).
+| Method | Parameters | Return | Description |
+| :--- | :--- | :--- | :--- |
+| `parse` | `iv_toml TYPE string` | `ro_instance TYPE REF TO zcl_toml` | Parses TOML string into instance |
+| `create_empty` | - | `ro_instance TYPE REF TO zcl_toml` | Creates empty document |
+| `stringify` | - | `rv_toml TYPE string` | Serializes document to TOML |
+| `exists` | `iv_path TYPE string` | `rv_exists TYPE abap_bool` | Checks if path exists |
+| `get_kind` | `iv_path TYPE string` | `rv_kind TYPE string` | Returns node kind |
+| `get_string` | `iv_path TYPE string` | `rv_value TYPE string` | Reads string scalar |
+| `get_integer` | `iv_path TYPE string` | `rv_value TYPE i` | Reads integer scalar |
+| `get_float` | `iv_path TYPE string` | `rv_value TYPE f` | Reads float scalar |
+| `get_boolean` | `iv_path TYPE string` | `rv_value TYPE abap_bool` | Reads boolean scalar |
+| `set_string` | `iv_path, iv_value` | - | Sets or creates string node |
+| `set_integer` | `iv_path, iv_value` | - | Sets or creates integer node |
+| `set_float` | `iv_path, iv_value` | - | Sets or creates float node |
+| `set_boolean` | `iv_path, iv_value` | - | Sets or creates boolean node |
+| `set_datetime` | `iv_path, iv_value` | - | Sets or creates datetime node |
+| `touch_table` | `iv_path TYPE string` | - | Ensures table path exists |
+| `touch_array` | `iv_path TYPE string` | - | Ensures array path exists |
+| `array_append_string` | `iv_path, iv_value` | - | Appends string to array |
+| `array_append_integer`| `iv_path, iv_value` | - | Appends integer to array |
+| `array_length` | `iv_path TYPE string` | `rv_len TYPE i` | Returns element count of array |
+| `delete_node` | `iv_path TYPE string` | - | Deletes node and descendants |
+| `clear` | - | - | Clears entire document |
 
-## 🛠️ Available Commands
+### Error Handling
 
-- **`npm run build`** - Transpile ABAP sources to JavaScript (`output/`)
-- **`npm start`** - Start Express ICF Web Server (`http://localhost:3000`)
-- **`npm run run`** - Transpile and run default `zhello_world` executable program
-- **`PROGRAM=myprogram npm run run`** - Run a specific ABAP program
-- **`npm test`** - Run linting and unit tests (`npm run lint && npm run unit`)
-- **`npm run unit`** - Run ABAP Unit test suite
-- **`npm run lint`** - Analyze ABAP code with abaplint
-- **`npm run lint:fix`** - Auto-fix fixable issues
-- **`npm run clean`** - Remove the transpiled `output/` directory
-- **`npm run deps`** - Update git submodule dependencies
+Errors raise `ZCX_TOML_ERROR`, which provides:
+- `get_message( ) TYPE string`: Human-readable error description
+- `get_line( ) TYPE i`: Line number where syntax error occurred (if applicable)
 
-## 📂 Project Structure
+## Architecture
 
+- **`ZCL_TOML`**: Public-facing facade providing path queries and manipulation.
+- **`ZCL_TOML_PARSER`**: TOML parser creating the AST node table.
+- **`ZCL_TOML_SERIALIZER`**: Serializes AST nodes back to TOML formatted text.
+- **`ZIF_TOML_TYPES`**: Shared data types (`ty_node`, `ty_nodes`, `ty_string_table`) and kind constants.
+- **`ZCX_TOML_ERROR`**: Exception class for parsing and serialization errors.
+
+## Development & Testing
+
+```bash
+# Install dependencies
+npm install
+
+# Run linter and ABAP Unit test suite
+npm test
+
+# Run unit tests only
+npm run unit
+
+# Run linter only
+npm run lint
 ```
-abap-toml/
-├── src/                            # ABAP source files (abapGit format)
-│   ├── zhello_world.prog.abap     # Sample executable program
-│   ├── zhello_world.prog.xml      # Sample program (abapGit metadata)
-│   ├── zif_hello_world.intf.abap  # Sample interface (source)
-│   ├── zif_hello_world.intf.xml   # Sample interface (abapGit metadata)
-│   ├── zcl_hello_world.clas.abap  # Sample class (source)
-│   ├── zcl_hello_world.clas.xml   # Sample class (abapGit metadata)
-│   ├── zcl_hello_world.clas.testclasses.abap  # Sample ABAP Unit tests
-│   ├── zcl_sicf_node.clas.abap    # Sample SICF HTTP handler (if_http_extension)
-│   └── zcl_sicf_node.clas.xml     # Sample SICF HTTP handler (metadata)
-├── scripts/                        # Utility and lifecycle scripts
-│   ├── clean.mjs                  # Removes transpiler output directory
-│   ├── setup.mjs                  # SQLite database setup
-│   ├── run.mjs                    # Cross-platform program runner
-│   └── server.mjs                 # Express ICF HTTP server runner
-├── deps/                           # Git submodule dependencies (open-abap libraries)
-├── output/                         # Transpiled JavaScript (generated)
-├── package.json                    # Project configuration
-├── abaplint.json                   # Linter configuration
-├── abaplint-transpiler.json        # Transpiler configuration
-├── .abapgit.xml                    # abapGit repository config
-├── .gitmodules                     # Git submodules configuration
-├── .gitignore                      # Git ignore rules
-└── README.md                       # This file
-```
 
-## 🔧 Configuration Files
+## License
 
-- **`abaplint.json`** - abaplint code analysis rules
-- **`abaplint-transpiler.json`** - Transpiler settings (input/output folders, libraries)
-- **`.gitmodules`** - Git submodule tracking for open-abap dependencies under `deps/`
-- **`scripts/setup.mjs`** - SQLite database connection setup
-- **`scripts/run.mjs`** - Runs the transpiled program selected via the `PROGRAM` environment variable
-- **`scripts/clean.mjs`** - Removes the transpiled output directory
-- **`package.json`** - npm dependencies and scripts
-
-## 📦 Dependencies
-
-- **@abaplint/runtime** - ABAP runtime environment
-- **@abaplint/transpiler-cli** - ABAP to JavaScript transpiler
-- **@abaplint/database-sqlite** - SQLite database support
-
-Transpilation pulls in the [open-abap](https://github.com/open-abap) libraries (core, RAP, XCO, GUI, REST, ADT, SEO and more) so a broad range of ABAP features can run locally.
-
-## 🔗 Useful Links
-
-- [abaplint GitHub](https://github.com/abaplint/abaplint)
-- [open-abap](https://github.com/open-abap/open-abap)
-- [abapGit](https://docs.abapgit.org/)
-- [ABAP Language Reference](https://help.sap.com/doc/abapdocu_latest_index_htm/latest/en-US/index.htm)
-
----
-
-Created with ❤️ by **abap-kit**
+MIT

@@ -5,11 +5,11 @@ CLASS zcl_toml DEFINITION
   PUBLIC SECTION.
     CLASS-METHODS parse
       IMPORTING iv_toml            TYPE string
-      RETURNING VALUE(rv_instance) TYPE REF TO zcl_toml
+      RETURNING VALUE(ro_instance) TYPE REF TO zcl_toml
       RAISING   zcx_toml_error.
 
     CLASS-METHODS create_empty
-      RETURNING VALUE(rv_instance) TYPE REF TO zcl_toml.
+      RETURNING VALUE(ro_instance) TYPE REF TO zcl_toml.
 
     METHODS stringify
       RETURNING VALUE(rv_toml) TYPE string
@@ -99,15 +99,15 @@ CLASS zcl_toml DEFINITION
     METHODS clear.
 
     METHODS constructor
-      IMPORTING iv_nodes TYPE zif_toml_types=>ty_nodes OPTIONAL.
+      IMPORTING it_nodes TYPE zif_toml_types=>ty_nodes OPTIONAL.
 
   PRIVATE SECTION.
-    DATA mv_nodes   TYPE zif_toml_types=>ty_nodes.
+    DATA mt_nodes   TYPE zif_toml_types=>ty_nodes.
     DATA mv_next_id TYPE i.
 
     METHODS split_path
       IMPORTING iv_path            TYPE string
-      RETURNING VALUE(rv_segments) TYPE zif_toml_types=>ty_string_table.
+      RETURNING VALUE(rt_segments) TYPE zif_toml_types=>ty_string_table.
 
     METHODS resolve_node
       IMPORTING iv_path      TYPE string
@@ -143,45 +143,45 @@ CLASS zcl_toml DEFINITION
 
     METHODS collect_subtree
       IMPORTING iv_root             TYPE i
-      RETURNING VALUE(rv_collected) TYPE zif_toml_types=>ty_nodes.
+      RETURNING VALUE(rt_collected) TYPE zif_toml_types=>ty_nodes.
 ENDCLASS.
 
 
 CLASS zcl_toml IMPLEMENTATION.
   METHOD constructor.
-    IF iv_nodes IS SUPPLIED AND lines( iv_nodes ) > 0.
-      mv_nodes = iv_nodes.
+    IF it_nodes IS SUPPLIED AND lines( it_nodes ) > 0.
+      mt_nodes = it_nodes.
       mv_next_id = 0.
-      DATA(lv_node) = VALUE zif_toml_types=>ty_node( ).
-      LOOP AT mv_nodes INTO lv_node.
-        IF lv_node-id >= mv_next_id.
-          mv_next_id = lv_node-id + 1.
+      DATA(ls_node) = VALUE zif_toml_types=>ty_node( ).
+      LOOP AT mt_nodes INTO ls_node.
+        IF ls_node-id >= mv_next_id.
+          mv_next_id = ls_node-id + 1.
         ENDIF.
       ENDLOOP.
     ELSE.
-      CLEAR mv_nodes.
+      CLEAR mt_nodes.
       INSERT VALUE zif_toml_types=>ty_node( id     = 0
                                             parent = -1
                                             name   = ''
                                             kind   = zif_toml_types=>c_kind_table
-                                            value  = '' ) INTO TABLE mv_nodes.
+                                            value  = '' ) INTO TABLE mt_nodes.
       mv_next_id = 1.
     ENDIF.
   ENDMETHOD.
 
   METHOD parse.
-    DATA(lv_parser) = NEW zcl_toml_parser( ).
-    DATA(lv_nodes) = lv_parser->parse( iv_toml ).
-    rv_instance = NEW zcl_toml( iv_nodes = lv_nodes ).
+    DATA(lo_parser) = NEW zcl_toml_parser( ).
+    DATA(lt_nodes) = lo_parser->parse( iv_toml ).
+    ro_instance = NEW zcl_toml( it_nodes = lt_nodes ).
   ENDMETHOD.
 
   METHOD create_empty.
-    rv_instance = NEW zcl_toml( ).
+    ro_instance = NEW zcl_toml( ).
   ENDMETHOD.
 
   METHOD stringify.
-    DATA(lv_ser) = NEW zcl_toml_serializer( ).
-    rv_toml = lv_ser->serialize( mv_nodes ).
+    DATA(lo_ser) = NEW zcl_toml_serializer( ).
+    rv_toml = lo_ser->serialize( mt_nodes ).
   ENDMETHOD.
 
   METHOD split_path.
@@ -192,15 +192,15 @@ CLASS zcl_toml IMPLEMENTATION.
     lv_tmp = condense( val  = lv_tmp
                        from = ` `
                        to   = `` ).
-    SPLIT lv_tmp AT '/' INTO TABLE rv_segments.
-    DATA(lv_clean) = VALUE zif_toml_types=>ty_string_table( ).
-    LOOP AT rv_segments INTO lv_seg.
+    SPLIT lv_tmp AT '/' INTO TABLE rt_segments.
+    DATA(lt_clean) = VALUE zif_toml_types=>ty_string_table( ).
+    LOOP AT rt_segments INTO lv_seg.
       IF lv_seg IS INITIAL.
         CONTINUE.
       ENDIF.
-      INSERT lv_seg INTO TABLE lv_clean.
+      INSERT lv_seg INTO TABLE lt_clean.
     ENDLOOP.
-    rv_segments = lv_clean.
+    rt_segments = lt_clean.
   ENDMETHOD.
 
   METHOD is_index_segment.
@@ -228,28 +228,28 @@ CLASS zcl_toml IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD find_child.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
     rv_id = 0.
-    LOOP AT mv_nodes INTO lv_node WHERE parent = iv_parent AND name = iv_name.
-      rv_id = lv_node-id.
+    LOOP AT mt_nodes INTO ls_node WHERE parent = iv_parent AND name = iv_name.
+      rv_id = ls_node-id.
       RETURN.
     ENDLOOP.
   ENDMETHOD.
 
   METHOD array_child_at.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
     DATA lv_pos  TYPE i.
-    DATA lv_kids TYPE zif_toml_types=>ty_nodes.
+    DATA lt_kids TYPE zif_toml_types=>ty_nodes.
 
-    LOOP AT mv_nodes INTO lv_node WHERE parent = iv_parent.
-      INSERT lv_node INTO TABLE lv_kids.
+    LOOP AT mt_nodes INTO ls_node WHERE parent = iv_parent.
+      INSERT ls_node INTO TABLE lt_kids.
     ENDLOOP.
-    SORT lv_kids BY id.
+    SORT lt_kids BY id.
     lv_pos = 0.
-    LOOP AT lv_kids INTO lv_node.
+    LOOP AT lt_kids INTO ls_node.
       IF lv_pos = iv_index.
-        rv_id = lv_node-id.
+        rv_id = ls_node-id.
         RETURN.
       ENDIF.
       lv_pos += 1.
@@ -258,24 +258,24 @@ CLASS zcl_toml IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD resolve_node.
-    DATA lv_segs TYPE zif_toml_types=>ty_string_table.
+    DATA lt_segs TYPE zif_toml_types=>ty_string_table.
     DATA lv_seg  TYPE string.
     DATA lv_cur  TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
-    lv_segs = split_path( iv_path ).
-    IF lines( lv_segs ) = 0.
+    lt_segs = split_path( iv_path ).
+    IF lines( lt_segs ) = 0.
       rv_id = 0.
       RETURN.
     ENDIF.
     lv_cur = 0.
-    LOOP AT lv_segs INTO lv_seg.
-      READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_cur.
+    LOOP AT lt_segs INTO lv_seg.
+      READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_cur.
       IF sy-subrc <> 0.
         rv_id = -1.
         RETURN.
       ENDIF.
-      IF lv_node-kind = zif_toml_types=>c_kind_array.
+      IF ls_node-kind = zif_toml_types=>c_kind_array.
         IF is_index_segment( lv_seg ) = abap_false.
           rv_id = -1.
           RETURN.
@@ -287,12 +287,12 @@ CLASS zcl_toml IMPLEMENTATION.
           RETURN.
         ENDIF.
       ELSEIF is_index_segment( lv_seg ) = abap_true.
-        READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_cur.
+        READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_cur.
         IF sy-subrc <> 0.
           rv_id = -1.
           RETURN.
         ENDIF.
-        IF lv_node-kind <> zif_toml_types=>c_kind_array.
+        IF ls_node-kind <> zif_toml_types=>c_kind_array.
           lv_cur = find_child( iv_parent = lv_cur
                                iv_name   = lv_seg ).
           IF lv_cur = 0.
@@ -314,43 +314,42 @@ CLASS zcl_toml IMPLEMENTATION.
           rv_id = -1.
           RETURN.
         ENDIF.
-
       ENDIF.
     ENDLOOP.
     rv_id = lv_cur.
   ENDMETHOD.
 
   METHOD resolve_parent.
-    DATA lv_segs  TYPE zif_toml_types=>ty_string_table.
+    DATA lt_segs  TYPE zif_toml_types=>ty_string_table.
     DATA lv_seg   TYPE string.
     DATA lv_cur   TYPE i.
     DATA lv_prev  TYPE i.
     DATA lv_idx   TYPE i.
     DATA lv_total TYPE i.
-    DATA lv_node  TYPE zif_toml_types=>ty_node.
+    DATA ls_node  TYPE zif_toml_types=>ty_node.
     DATA lv_new   TYPE i.
     DATA lv_found TYPE i.
 
     CLEAR ev_parent.
     CLEAR ev_leaf.
     CLEAR ev_leaf_is_idx.
-    lv_segs = split_path( iv_path ).
-    lv_total = lines( lv_segs ).
+    lt_segs = split_path( iv_path ).
+    lv_total = lines( lt_segs ).
     IF lv_total = 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = 'Empty path' ).
     ENDIF.
-    ev_leaf = lv_segs[ lv_total ].
+    ev_leaf = lt_segs[ lv_total ].
     ev_leaf_is_idx = is_index_segment( ev_leaf ).
     lv_cur = 0.
     lv_idx = 1.
     WHILE lv_idx < lv_total.
-      lv_seg = lv_segs[ lv_idx ].
+      lv_seg = lt_segs[ lv_idx ].
       lv_prev = lv_cur.
-      READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_cur.
+      READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_cur.
       IF sy-subrc <> 0.
         RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path not found: { iv_path }| ).
       ENDIF.
-      IF lv_node-kind = zif_toml_types=>c_kind_array.
+      IF ls_node-kind = zif_toml_types=>c_kind_array.
         lv_cur = array_child_at( iv_parent = lv_cur
                                  iv_index  = CONV i( lv_seg ) ).
         IF lv_cur = -1.
@@ -367,7 +366,7 @@ CLASS zcl_toml IMPLEMENTATION.
                                                   parent = lv_prev
                                                   name   = lv_seg
                                                   kind   = zif_toml_types=>c_kind_table
-                                                  value  = '' ) INTO TABLE mv_nodes.
+                                                  value  = '' ) INTO TABLE mt_nodes.
             lv_cur = lv_new.
           ELSE.
             RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path not found: { iv_path }| ).
@@ -390,57 +389,57 @@ CLASS zcl_toml IMPLEMENTATION.
 
   METHOD get_kind.
     DATA lv_id   TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path not found: { iv_path }| ).
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    rv_kind = lv_node-kind.
+    rv_kind = ls_node-kind.
   ENDMETHOD.
 
   METHOD get_string.
     DATA lv_id   TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path not found: { iv_path }| ).
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF     lv_node-kind <> zif_toml_types=>c_kind_string
-       AND lv_node-kind <> zif_toml_types=>c_kind_datetime
-       AND lv_node-kind <> zif_toml_types=>c_kind_date
-       AND lv_node-kind <> zif_toml_types=>c_kind_time.
+    IF     ls_node-kind <> zif_toml_types=>c_kind_string
+       AND ls_node-kind <> zif_toml_types=>c_kind_datetime
+       AND ls_node-kind <> zif_toml_types=>c_kind_date
+       AND ls_node-kind <> zif_toml_types=>c_kind_time.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Not a string at: { iv_path }| ).
     ENDIF.
-    rv_value = lv_node-value.
+    rv_value = ls_node-value.
   ENDMETHOD.
 
   METHOD get_integer.
     DATA lv_id   TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path not found: { iv_path }| ).
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF lv_node-kind <> zif_toml_types=>c_kind_integer.
+    IF ls_node-kind <> zif_toml_types=>c_kind_integer.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Not an integer at: { iv_path }| ).
     ENDIF.
     TRY.
-        rv_value = CONV i( lv_node-value ).
+        rv_value = CONV i( ls_node-value ).
       CATCH cx_sy_conversion_no_number.
         RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Bad integer value at: { iv_path }| ).
     ENDTRY.
@@ -448,22 +447,22 @@ CLASS zcl_toml IMPLEMENTATION.
 
   METHOD get_float.
     DATA lv_id   TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path not found: { iv_path }| ).
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF     lv_node-kind <> zif_toml_types=>c_kind_float
-       AND lv_node-kind <> zif_toml_types=>c_kind_integer.
+    IF     ls_node-kind <> zif_toml_types=>c_kind_float
+       AND ls_node-kind <> zif_toml_types=>c_kind_integer.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Not a float at: { iv_path }| ).
     ENDIF.
     TRY.
-        rv_value = CONV f( lv_node-value ).
+        rv_value = CONV f( ls_node-value ).
       CATCH cx_sy_conversion_no_number.
         RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Bad float value at: { iv_path }| ).
     ENDTRY.
@@ -471,20 +470,20 @@ CLASS zcl_toml IMPLEMENTATION.
 
   METHOD get_boolean.
     DATA lv_id   TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path not found: { iv_path }| ).
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF lv_node-kind <> zif_toml_types=>c_kind_boolean.
+    IF ls_node-kind <> zif_toml_types=>c_kind_boolean.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Not a boolean at: { iv_path }| ).
     ENDIF.
-    rv_value = xsdbool( lv_node-value = 'true' ).
+    rv_value = xsdbool( ls_node-value = 'true' ).
   ENDMETHOD.
 
   METHOD upsert_scalar.
@@ -492,7 +491,7 @@ CLASS zcl_toml IMPLEMENTATION.
     DATA lv_leaf   TYPE string.
     DATA lv_is_idx TYPE abap_bool.
     DATA lv_id     TYPE i.
-    DATA lv_node   TYPE zif_toml_types=>ty_node.
+    DATA ls_node   TYPE zif_toml_types=>ty_node.
 
     resolve_parent( EXPORTING iv_path        = iv_path
                               iv_create      = abap_true
@@ -509,21 +508,21 @@ CLASS zcl_toml IMPLEMENTATION.
                                             parent = lv_parent
                                             name   = lv_leaf
                                             kind   = iv_kind
-                                            value  = iv_value ) INTO TABLE mv_nodes.
+                                            value  = iv_value ) INTO TABLE mt_nodes.
       mv_next_id += 1.
       RETURN.
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF    lv_node-kind = zif_toml_types=>c_kind_table
-       OR lv_node-kind = zif_toml_types=>c_kind_array.
+    IF    ls_node-kind = zif_toml_types=>c_kind_table
+       OR ls_node-kind = zif_toml_types=>c_kind_array.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path is table/array, cannot overwrite: { iv_path }| ).
     ENDIF.
-    lv_node-kind  = iv_kind.
-    lv_node-value = iv_value.
-    MODIFY mv_nodes FROM lv_node TRANSPORTING kind value WHERE id = lv_id.
+    ls_node-kind  = iv_kind.
+    ls_node-value = iv_value.
+    MODIFY mt_nodes FROM ls_node TRANSPORTING kind value WHERE id = lv_id.
   ENDMETHOD.
 
   METHOD set_string.
@@ -580,7 +579,7 @@ CLASS zcl_toml IMPLEMENTATION.
     DATA lv_leaf   TYPE string.
     DATA lv_is_idx TYPE abap_bool.
     DATA lv_id     TYPE i.
-    DATA lv_node   TYPE zif_toml_types=>ty_node.
+    DATA ls_node   TYPE zif_toml_types=>ty_node.
 
     resolve_parent( EXPORTING iv_path        = iv_path
                               iv_create      = abap_true
@@ -597,15 +596,15 @@ CLASS zcl_toml IMPLEMENTATION.
                                             parent = lv_parent
                                             name   = lv_leaf
                                             kind   = zif_toml_types=>c_kind_table
-                                            value  = '' ) INTO TABLE mv_nodes.
+                                            value  = '' ) INTO TABLE mt_nodes.
       mv_next_id += 1.
       RETURN.
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF lv_node-kind <> zif_toml_types=>c_kind_table.
+    IF ls_node-kind <> zif_toml_types=>c_kind_table.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path exists but is not a table: { iv_path }| ).
     ENDIF.
   ENDMETHOD.
@@ -615,7 +614,7 @@ CLASS zcl_toml IMPLEMENTATION.
     DATA lv_leaf   TYPE string.
     DATA lv_is_idx TYPE abap_bool.
     DATA lv_id     TYPE i.
-    DATA lv_node   TYPE zif_toml_types=>ty_node.
+    DATA ls_node   TYPE zif_toml_types=>ty_node.
 
     resolve_parent( EXPORTING iv_path        = iv_path
                               iv_create      = abap_true
@@ -632,56 +631,56 @@ CLASS zcl_toml IMPLEMENTATION.
                                             parent = lv_parent
                                             name   = lv_leaf
                                             kind   = zif_toml_types=>c_kind_array
-                                            value  = '' ) INTO TABLE mv_nodes.
+                                            value  = '' ) INTO TABLE mt_nodes.
       mv_next_id += 1.
       RETURN.
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF lv_node-kind <> zif_toml_types=>c_kind_array.
+    IF ls_node-kind <> zif_toml_types=>c_kind_array.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Path exists but is not an array: { iv_path }| ).
     ENDIF.
   ENDMETHOD.
 
   METHOD array_append_string.
     DATA lv_id   TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Array not found: { iv_path }| ).
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF lv_node-kind <> zif_toml_types=>c_kind_array.
+    IF ls_node-kind <> zif_toml_types=>c_kind_array.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Not an array: { iv_path }| ).
     ENDIF.
     INSERT VALUE zif_toml_types=>ty_node( id     = mv_next_id
                                           parent = lv_id
                                           name   = ''
                                           kind   = zif_toml_types=>c_kind_string
-                                          value  = iv_value ) INTO TABLE mv_nodes.
+                                          value  = iv_value ) INTO TABLE mt_nodes.
     mv_next_id += 1.
   ENDMETHOD.
 
   METHOD array_append_integer.
     DATA lv_id   TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
     DATA lv_str  TYPE string.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Array not found: { iv_path }| ).
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF lv_node-kind <> zif_toml_types=>c_kind_array.
+    IF ls_node-kind <> zif_toml_types=>c_kind_array.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Not an array: { iv_path }| ).
     ENDIF.
     lv_str = |{ iv_value }|.
@@ -692,38 +691,38 @@ CLASS zcl_toml IMPLEMENTATION.
                                           parent = lv_id
                                           name   = ''
                                           kind   = zif_toml_types=>c_kind_integer
-                                          value  = lv_str ) INTO TABLE mv_nodes.
+                                          value  = lv_str ) INTO TABLE mt_nodes.
     mv_next_id += 1.
   ENDMETHOD.
 
   METHOD array_length.
     DATA lv_id   TYPE i.
-    DATA lv_node TYPE zif_toml_types=>ty_node.
+    DATA ls_node TYPE zif_toml_types=>ty_node.
     " TODO: variable is assigned but never used (ABAP cleaner)
-    DATA lv_row  TYPE zif_toml_types=>ty_node.
+    DATA ls_row  TYPE zif_toml_types=>ty_node.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Array not found: { iv_path }| ).
     ENDIF.
-    READ TABLE mv_nodes INTO lv_node WITH KEY id = lv_id.
+    READ TABLE mt_nodes INTO ls_node WITH KEY id = lv_id.
     IF sy-subrc <> 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Node not found| ).
     ENDIF.
-    IF lv_node-kind <> zif_toml_types=>c_kind_array.
+    IF ls_node-kind <> zif_toml_types=>c_kind_array.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = |Not an array: { iv_path }| ).
     ENDIF.
     rv_len = 0.
-    LOOP AT mv_nodes INTO lv_row WHERE parent = lv_id.
+    LOOP AT mt_nodes INTO ls_row WHERE parent = lv_id.
       rv_len += 1.
     ENDLOOP.
   ENDMETHOD.
 
   METHOD delete_node.
     DATA lv_id   TYPE i.
-    DATA lv_dead TYPE zif_toml_types=>ty_nodes.
-    DATA lv_row  TYPE zif_toml_types=>ty_node.
-    DATA lv_keep TYPE zif_toml_types=>ty_nodes.
+    DATA lt_dead TYPE zif_toml_types=>ty_nodes.
+    DATA ls_row  TYPE zif_toml_types=>ty_node.
+    DATA lt_keep TYPE zif_toml_types=>ty_nodes.
 
     lv_id = resolve_node( iv_path ).
     IF lv_id < 0.
@@ -732,44 +731,44 @@ CLASS zcl_toml IMPLEMENTATION.
     IF lv_id = 0.
       RAISE EXCEPTION NEW zcx_toml_error( iv_text = 'Cannot delete root' ).
     ENDIF.
-    lv_dead = collect_subtree( lv_id ).
-    LOOP AT mv_nodes INTO lv_row.
-      IF line_exists( lv_dead[ id = lv_row-id ] ) = abap_false.
-        INSERT lv_row INTO TABLE lv_keep.
+    lt_dead = collect_subtree( lv_id ).
+    LOOP AT mt_nodes INTO ls_row.
+      IF line_exists( lt_dead[ id = ls_row-id ] ) = abap_false.
+        INSERT ls_row INTO TABLE lt_keep.
       ENDIF.
     ENDLOOP.
-    mv_nodes = lv_keep.
+    mt_nodes = lt_keep.
   ENDMETHOD.
 
   METHOD collect_subtree.
-    DATA lv_row  TYPE zif_toml_types=>ty_node.
-    DATA lv_kids TYPE zif_toml_types=>ty_nodes.
-    DATA lv_kid  TYPE zif_toml_types=>ty_node.
-    DATA lv_sub  TYPE zif_toml_types=>ty_nodes.
+    DATA ls_row  TYPE zif_toml_types=>ty_node.
+    DATA lt_kids TYPE zif_toml_types=>ty_nodes.
+    DATA ls_kid  TYPE zif_toml_types=>ty_node.
+    DATA lt_sub  TYPE zif_toml_types=>ty_nodes.
 
     INSERT VALUE zif_toml_types=>ty_node( id     = iv_root
                                           parent = 0
                                           name   = ''
                                           kind   = ''
-                                          value  = '' ) INTO TABLE rv_collected.
-    LOOP AT mv_nodes INTO lv_row WHERE parent = iv_root.
-      INSERT lv_row INTO TABLE lv_kids.
+                                          value  = '' ) INTO TABLE rt_collected.
+    LOOP AT mt_nodes INTO ls_row WHERE parent = iv_root.
+      INSERT ls_row INTO TABLE lt_kids.
     ENDLOOP.
-    LOOP AT lv_kids INTO lv_kid.
-      lv_sub = collect_subtree( lv_kid-id ).
-      LOOP AT lv_sub INTO lv_row.
-        INSERT lv_row INTO TABLE rv_collected.
+    LOOP AT lt_kids INTO ls_kid.
+      lt_sub = collect_subtree( ls_kid-id ).
+      LOOP AT lt_sub INTO ls_row.
+        INSERT ls_row INTO TABLE rt_collected.
       ENDLOOP.
     ENDLOOP.
   ENDMETHOD.
 
   METHOD clear.
-    CLEAR mv_nodes.
+    CLEAR mt_nodes.
     INSERT VALUE zif_toml_types=>ty_node( id     = 0
                                           parent = -1
                                           name   = ''
                                           kind   = zif_toml_types=>c_kind_table
-                                          value  = '' ) INTO TABLE mv_nodes.
+                                          value  = '' ) INTO TABLE mt_nodes.
     mv_next_id = 1.
   ENDMETHOD.
 ENDCLASS.

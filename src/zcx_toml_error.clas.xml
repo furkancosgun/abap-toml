@@ -5,7 +5,7 @@
    <VSEOCLASS>
     <CLSNAME>ZCX_TOML_ERROR</CLSNAME>
     <LANGU>E</LANGU>
-    <DESCRIPT>TOML parse/serialize error</DESCRIPT>
+    <DESCRIPT>TOML parser and serializer exception</DESCRIPT>
     <STATE>1</STATE>
     <CLSCCINCL>X</CLSCCINCL>
     <FIXPT>X</FIXPT>
