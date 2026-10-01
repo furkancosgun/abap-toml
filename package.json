@@ -1,0 +1,30 @@
+{
+  "name": "abap-toml",
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "node scripts/clean.mjs && abap_transpile abaplint-transpiler.json",
+    "start": "npm run build && node scripts/server.mjs",
+    "server": "npm run start",
+    "run": "npm run build && node scripts/run.mjs",
+    "exec": "npm run run",
+    "test": "npm run lint && npm run unit",
+    "unit": "npm run build && node --expose-gc output/index.mjs",
+    "lint": "abaplint",
+    "lint:fix": "abaplint --fix",
+    "fix": "abaplint --fix",
+    "clean": "node scripts/clean.mjs",
+    "deps": "git submodule update --init --recursive"
+  },
+  "devDependencies": {
+    "abap-kit": "latest",
+    "@abaplint/cli": "latest",
+    "@abaplint/runtime": "latest",
+    "@abaplint/transpiler-cli": "latest",
+    "@abaplint/database-sqlite": "latest",
+    "express": "latest"
+  }
+}
